@@ -112,8 +112,6 @@ function getModelFromItem($item)
    return $typemodel;
 }
 
-
-
 class PluginReservationMenu extends CommonGLPI
 {
 
@@ -178,6 +176,79 @@ class PluginReservationMenu extends CommonGLPI
       }
       $ong[$i] = __('Available Hardware', "reservation");
       return $ong;
+   }
+
+   public static function htmlFormAddItem($res) {
+      $html = '';
+      $html .= '<form method="POST" name="form" action="#" onsubmit="return addItem('.$res['reservations_id'].')">';
+      $html .=  '<select name="add_item">';
+      $available_reservationsitem = PluginReservationReservation::getAvailablesItems($res['begin'], $res['end']);
+      foreach ($available_reservationsitem as $item) {
+         $html .= "\t", '<option value="', $item['id'], '">', getItemForItemtype($item['itemtype'])->getTypeName() . ' - ' . $item["name"], '</option>';
+      }
+
+      $html .=  "<input type='hidden' name='add_item_to_reservation' value='" . $reservation_user_info['reservations_id'] . "'>";
+      $html .=  "<input type='submit' class='submit' name='add' value=" . _sx('button', 'Add') . ">";
+      $html .= Html::closeForm();
+      return $html;
+   }
+      
+   public static function htmlAddItem($res) {
+      // $available_reservationsitem = PluginReservationReservation::getAvailablesItems($reservation->fields['begin'], $reservation->fields['end']);
+      $html = '';
+      $html .= '<li>';
+      $html .= '<span class="bouton" id="bouton_add' . $res['reservations_id'] . '" onclick="javascript:add_form(\'add' . $res['reservations_id'] '\');">' . _sx('button', 'Add an item') . '</span>';
+      $html .= '<div id="add' . $res['reservations_id'] . '" style="display:none;">';
+      $html .=  '</div></li>';
+      return $html;
+   }
+
+   public static function htmlCheckinDate($res) {
+      $html = '';
+      if ($res['checkindate'] != null) {
+         $html .= '<td>';
+         $html .= date(self::getDateFormat() . " H:i", strtotime($res['checkindate']));
+         $html .= '</td>';
+      } else {
+         $html .= '<td id="checkin'.$res['reservations_id'].'">';
+         $html .=  '<center>';
+         $html .=  '<a class="bouton" href="javascript:void(0);" onclick="checkin('.$res['reservations_id'].')">';
+         $html .=  '<img title="'. _sx('tooltip', 'Set As Gone', "reservation") .'" alt="" src="../pics/redbutton.png"></img>';
+         $html .=  '</a></center></td>';
+      }
+      return $html;  
+   }
+
+   public static function htmlCheckoutDate($resaId) {
+      $html = '';
+      if ($res['effectivedate'] != null) {
+         $html .= '<td>';
+         $html .= date(self::getDateFormat() . " \à H:i:s", strtotime($res['effectivedate']));
+         $html .= '</td>';
+      } else {
+         $html .= '<td id="checkout'.$res['reservations_id'].'">';
+         $html .= '<center>';
+         $html .= '<a class="bouton" href="javascript:void(0);" onclick="checkout('.$res['reservations_id'].')">';
+         $html .= '<img title="' . _sx('tooltip', 'Set As Returned', "reservation") . '" alt="" src="../pics/greenbutton.png"></img>';
+         $html .= '</a></center></td>';
+      }
+      return $html; 
+   }
+           
+   public static function htmlItemName($res) {
+      $reservation = new Reservation();
+      $reservation->getFromDB($res['reservations_id']);
+      $reservationitems = $reservation->getConnexityItem('reservationitem', 'reservationitems_id');
+      $item = $reservationitems->getConnexityItem($reservationitems->fields['itemtype'], 'items_id');
+      return Html::link($item->fields['name'], $item->getFormURLWithID($item->fields['id']));
+   }
+
+   public static function htmlItemToolTip($res) {
+      $reservation = new Reservation();
+      $reservation->getFromDB($res['reservations_id']);
+      $reservationitems = $reservation->getConnexityItem('reservationitem', 'reservationitems_id');
+      $item = $reservationitems->getConnexityItem($reservationitems->fields['itemtype'], 'items_id');
+      return getToolTipforItem($item);
    }
 
    public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
@@ -306,7 +377,7 @@ class PluginReservationMenu extends CommonGLPI
          }
       }
       return $filteredArray;
-}
+   }
 
    /**
     *
@@ -379,11 +450,6 @@ class PluginReservationMenu extends CommonGLPI
          foreach ($reservations_user_list as $reservation_user_info) {
             $count++;
 
-            $reservation = new Reservation();
-            $reservation->getFromDB($reservation_user_info['reservations_id']);
-            $reservationitems = $reservation->getConnexityItem('reservationitem', 'reservationitems_id');
-            $item = $reservationitems->getConnexityItem($reservationitems->fields['itemtype'], 'items_id');
-
             $color = "";
             if ($reservation_user_info["begin"] > $end) {
                $color = "bgcolor=\"lightgrey\"";
@@ -393,11 +459,11 @@ class PluginReservationMenu extends CommonGLPI
             }
 
             // item
-            echo "<td $color>";
-            echo Html::link($item->fields['name'], $item->getFormURLWithID($item->fields['id']));
+            echo '<td id="itemName'.$reservation_user_info['reservations_id'].'" '.$color.'>';
+            echo htmlItemName($reservation_user_info);
             echo "</td>";
-            echo "<td $color>";
-            getToolTipforItem($item);
+            echo '<td id="itemToolTip'.$reservation_user_info['reservations_id'].'" '.$color.'>';
+            echo htmlItemToolTip($reservation_user_info);
             echo "</td>";
 
             $rowspan_line = 1;
@@ -442,28 +508,12 @@ class PluginReservationMenu extends CommonGLPI
 
             // checkin buttons or date checkin
             if ($checkin_enable) {
-               if ($reservation_user_info['checkindate'] != null) {
-                  echo "<td>" . date(self::getDateFormat() . " H:i", strtotime($reservation_user_info['checkindate'])) . "</td>";
-               } else {
-                  echo '<td id="checkin'.$reservation_user_info['reservations_id'].'">';
-                  echo '<center>';
-                  echo '<a class="bouton" href="javascript:void(0);" onclick="checkin('.$reservation_user_info['reservations_id'].')">';
-                  echo '<img title="'. _sx('tooltip', 'Set As Gone', "reservation") .'" alt="" src="../pics/redbutton.png"></img>';
-                  echo '</a></center></td>';
-               }
+               echo htmlCheckinDate($reservation_user_info);
             }
 
             // checkout buttons or date checkout
-            if ($reservation_user_info['effectivedate'] != null) {
-               echo "<td>" . date(self::getDateFormat() . " \à H:i:s", strtotime($reservation_user_info['effectivedate'])) . "</td>";
-            } else {
-               echo '<td id="checkout'.$reservation_user_info['reservations_id'].'">';
-               echo '<center>';
-               echo '<a class="bouton" href="javascript:void(0);" onclick="checkout('.$reservation_user_info['reservations_id'].')">';
-               echo '<img title="' . _sx('tooltip', 'Set As Returned', "reservation") . '" alt="" src="../pics/greenbutton.png"></img>';
-               echo '</a></center></td>';
-            }
-
+            echo htmlCheckoutDate($reservation_user_info);
+            
             // action
             $available_reservationsitem = PluginReservationReservation::getAvailablesItems($reservation->fields['begin'], $reservation->fields['end']);
             echo "<td>";
